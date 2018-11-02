@@ -6,10 +6,12 @@ from django.utils.translation import ugettext as _
 from six import text_type
 from xblock.fields import Scope
 
+import crum
 from xblock_django.models import XBlockStudioConfigurationFlag
 from xmodule.modulestore.django import modulestore
 
 from openedx.features.course_experience import COURSE_ENABLE_UNENROLLED_ACCESS_FLAG
+from cms.djangoapps.contentstore.config.waffle import ENABLE_PROCTORING_PROVIDER_OVERRIDES
 
 
 class CourseMetadata(object):
@@ -123,10 +125,17 @@ class CourseMetadata(object):
         # if the enable_anonymous_access flag is not enabled
         if not COURSE_ENABLE_UNENROLLED_ACCESS_FLAG.is_enabled(course_key=course_key):
             filtered_list.append('course_visibility')
+        # can I get course key from request?
+        # request = crum.get_current_request()
+        # import pdb; pdb.set_trace()
+        if not ENABLE_PROCTORING_PROVIDER_OVERRIDES.is_enabled(course_key):
+            filtered_list.append('proctoring_provider')
+            filtered_list.append('proctoring_rules')
+
         return filtered_list
 
     @classmethod
-    def fetch(cls, descriptor):
+    def fetch(cls, descriptor, course_key):
         """
         Fetch the key:value editable course details for the given course from
         persistence and return a CourseMetadata model.

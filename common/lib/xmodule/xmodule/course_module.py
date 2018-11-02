@@ -47,6 +47,24 @@ DEFAULT_MOBILE_AVAILABLE = getattr(settings, 'DEFAULT_MOBILE_AVAILABLE', False)
 COURSE_VISIBILITY_PRIVATE = 'private'
 COURSE_VISIBILITY_PUBLIC_OUTLINE = 'public_outline'
 COURSE_VISIBILITY_PUBLIC = 'public'
+PROCTORING_BACKENDS_SETTINGS = getattr(
+    settings, 
+    'PROCTORING_BACKENDS', 
+    None
+)
+if PROCTORING_BACKENDS_SETTINGS:
+    DEFAULT_PROCTORING_PROVIDER = PROCTORING_BACKENDS_SETTINGS.get('DEFAULT', None)
+
+    try:
+        DEFAULT_PROCTORING_RULES = PROCTORING_BACKENDS_SETTINGS[DEFAULT_PROCTORING_PROVIDER]['default_config']
+    except KeyError:
+        DEFAULT_PROCTORING_RULES = {}
+
+    # if DEFAULT_PROCTORING_PROVIDER and DEFAULT_PROCTORING_PROVIDER in PROCTORING_BACKENDS_SETTINGS:
+    #     DEFAULT_PROCTORING_PROVIDER_SETTINGS = PROCTORING_BACKENDS_SETTINGS[DEFAULT_PROCTORING_PROVIDER]
+        
+    #     if DEFAULT_PROCTORING_PROVIDER_SETTINGS and 'default_config' in DEFAULT_PROCTORING_PROVIDER_SETTINGS:
+    #         DEFAULT_PROCTORING_RULES = DEFAULT_PROCTORING_PROVIDER_SETTINGS['default_config']
 
 
 class StringOrDate(Date):
@@ -735,6 +753,24 @@ class CourseFields(object):
             "Note that enabling proctored exams will also enable timed exams."
         ),
         default=False,
+        scope=Scope.settings
+    )
+
+    proctoring_provider = String(
+        display_name=_("Proctoring Provider"),
+        help=_(
+            "Enter a proctoring provider."
+        ),
+        default=DEFAULT_PROCTORING_PROVIDER,
+        scope=Scope.settings
+    )
+
+    proctoring_rules = Dict(
+         display_name=_("Proctoring Rules"),
+        help=_(
+            "Enter proctoring rules."
+        ),
+        default=DEFAULT_PROCTORING_RULES,
         scope=Scope.settings
     )
 

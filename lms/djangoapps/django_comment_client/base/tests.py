@@ -39,7 +39,6 @@ from openedx.core.djangoapps.course_groups.cohorts import set_course_cohorted
 from openedx.core.djangoapps.course_groups.tests.helpers import CohortFactory
 from openedx.core.djangoapps.waffle_utils.testutils import WAFFLE_TABLES, override_waffle_flag
 from openedx.core.lib.tests import attr
-from openedx.features.course_duration_limits.config import CONTENT_TYPE_GATING_FLAG
 from student.roles import CourseStaffRole, UserBasedRole
 from student.tests.factories import CourseAccessRoleFactory, CourseEnrollmentFactory, UserFactory
 from util.testing import UrlResetMixin
@@ -403,7 +402,6 @@ class ViewsQueryCountTestCase(
                         func(self, *args, **kwargs)
         return inner
 
-    @override_waffle_flag(CONTENT_TYPE_GATING_FLAG, True)
     @ddt.data(
         (ModuleStoreEnum.Type.mongo, 3, 4, 38),
         (ModuleStoreEnum.Type.split, 3, 13, 38),
@@ -413,7 +411,6 @@ class ViewsQueryCountTestCase(
     def test_create_thread(self, mock_request):
         self.create_thread_helper(mock_request)
 
-    @override_waffle_flag(CONTENT_TYPE_GATING_FLAG, True)
     @ddt.data(
         (ModuleStoreEnum.Type.mongo, 3, 3, 34),
         (ModuleStoreEnum.Type.split, 3, 10, 34),

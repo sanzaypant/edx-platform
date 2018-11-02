@@ -3,7 +3,7 @@
 Performance tests for field overrides.
 """
 import itertools
-from datetime import datetime
+from datetime import datetime, date
 
 import ddt
 import mock
@@ -22,7 +22,7 @@ from lms.djangoapps.ccx.tests.factories import CcxFactory
 from opaque_keys.edx.keys import CourseKey
 from openedx.core.djangoapps.content.block_structure.api import get_course_in_cache
 from openedx.core.djangoapps.waffle_utils.testutils import WAFFLE_TABLES
-from openedx.features.course_duration_limits.config import CONTENT_TYPE_GATING_FLAG
+from openedx.features.content_type_gating.models import ContentTypeGatingConfig
 from pytz import UTC
 from student.models import CourseEnrollment
 from student.tests.factories import UserFactory
@@ -198,11 +198,15 @@ class FieldOverridePerformanceTestCase(FieldOverrideTestMixin, ProceduralCourseT
         XBLOCK_FIELD_DATA_WRAPPERS=[],
         MODULESTORE_FIELD_OVERRIDE_PROVIDERS=[],
     )
-    @mock.patch.object(CONTENT_TYPE_GATING_FLAG, 'is_enabled', return_value=True)
-    def test_field_overrides(self, overrides, course_width, enable_ccx, view_as_ccx, _mock_flag):
+    def test_field_overrides(self, overrides, course_width, enable_ccx, view_as_ccx):
         """
         Test without any field overrides.
         """
+        ContentTypeGatingConfig.objects.create(
+            enabled=True,
+            enabled_as_of=date(2018, 1, 1),
+        )
+
         providers = {
             'no_overrides': (),
             'ccx': ('ccx.overrides.CustomCoursesForEdxOverrideProvider',)

@@ -2,6 +2,7 @@
 Test audit user's access to various content based on content-gating features.
 """
 
+from datetime import date
 import ddt
 from django.http import Http404
 from django.test.client import RequestFactory
@@ -14,14 +15,13 @@ from courseware.access_response import IncorrectPartitionGroupError
 from lms.djangoapps.courseware.module_render import load_single_xblock
 from openedx.core.djangoapps.waffle_utils.testutils import override_waffle_flag
 from openedx.core.lib.url_utils import quote_slashes
-from openedx.features.course_duration_limits.config import CONTENT_TYPE_GATING_FLAG
+from openedx.features.content_type_gating.models import ContentTypeGatingConfig
 from student.tests.factories import TEST_PASSWORD, AdminFactory, CourseEnrollmentFactory, UserFactory
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory, ItemFactory
 
 
 @ddt.ddt
-@override_waffle_flag(CONTENT_TYPE_GATING_FLAG, True)
 @override_settings(FIELD_OVERRIDE_PROVIDERS=(
     'openedx.features.content_type_gating.field_override.ContentTypeGatingFieldOverride',
 ))
@@ -214,10 +214,18 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                 )
                 blocks_dict[problem_type] = block
 
+<<<<<<< HEAD
             return {
                 'course': course,
                 'blocks': blocks_dict,
             }
+=======
+    def setUp(self):
+        super(TestProblemTypeAccess, self).setUp()
+        self.audit_user = UserFactory.create()
+        self.enrollment = CourseEnrollmentFactory.create(user=self.audit_user, course_id=self.course.id, mode='audit')
+        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
+>>>>>>> Add StackedConfigurationModels for managing content_type_gating and course_duration_limits
 
     @patch("crum.get_current_request")
     def _assert_block_is_gated(self, mock_get_current_request, block, is_gated, user_id, course_id):
@@ -243,6 +251,7 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                           wraps=IncorrectPartitionGroupError.__init__) as mock_access_error:
             if is_gated:
                 with self.assertRaises(Http404):
+<<<<<<< HEAD
                     load_single_xblock(
                         request=fake_request,
                         user_id=user_id,
@@ -260,6 +269,15 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                     usage_key_string=unicode(block.scope_ids.usage_id),
                     course=None
                 )
+=======
+                    block = load_single_xblock(fake_request, self.audit_user.id, unicode(self.course.id),
+                                               unicode(block.scope_ids.usage_id), course=self.course)
+                # check that has_access raised the IncorrectPartitionGroupError in order to gate the block
+                self.assertTrue(mock_access_error.called)
+            else:
+                block = load_single_xblock(fake_request, self.audit_user.id, unicode(self.course.id),
+                                           unicode(block.scope_ids.usage_id), course=self.course)
+>>>>>>> Add StackedConfigurationModels for managing content_type_gating and course_duration_limits
                 # check that has_access did not raise the IncorrectPartitionGroupError thereby not gating the block
                 self.assertFalse(mock_access_error.called)
 

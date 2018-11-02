@@ -31,7 +31,7 @@ from lms.djangoapps.ccx.models import CustomCourseForEdX
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from openedx.core.djangoapps.waffle_utils.testutils import WAFFLE_TABLES, override_waffle_flag
 from openedx.core.lib.tests import attr
-from openedx.features.course_duration_limits.config import CONTENT_TYPE_GATING_FLAG
+from openedx.features.content_type_gating.models import ContentTypeGatingConfig
 from student.models import CourseEnrollment
 from student.roles import CourseCcxCoachRole, CourseStaffRole
 from student.tests.factories import (
@@ -827,8 +827,10 @@ class CourseOverviewAccessTestCase(ModuleStoreTestCase):
     )
     @ddt.unpack
     @patch.dict('django.conf.settings.FEATURES', {'DISABLE_START_DATES': False})
-    @override_waffle_flag(CONTENT_TYPE_GATING_FLAG, True)
     def test_course_catalog_access_num_queries(self, user_attr_name, action, course_attr_name):
+        config = ContentTypeGatingConfig(enabled=True)
+        config.save()
+
         course = getattr(self, course_attr_name)
 
         # get a fresh user object that won't have any cached role information

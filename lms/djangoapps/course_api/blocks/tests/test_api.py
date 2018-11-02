@@ -211,7 +211,7 @@ class TestQueryCountsWithIndividualOverrideProvider(TestGetBlocksQueryCountsBase
             self._get_blocks(
                 course,
                 expected_mongo_queries=0,
-                expected_sql_queries=7 if with_storage_backing else 6,
+                expected_sql_queries=8 if with_storage_backing else 7,
             )
 
     @ddt.data(

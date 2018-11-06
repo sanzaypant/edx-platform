@@ -2,6 +2,7 @@
 [MASTER]
 ignore+ = ,.git,.tox,migrations,node_modules,.pycharm_helpers
 init-hook="import sys; sys.path.extend(['lms/djangoapps', 'cms/djangoapps', 'common/djangoapps'])"
+load-plugins+=,caniusepython3.pylint_checker
 
 [BASIC]
 attr-rgx = [a-z_][a-z0-9_]{2,40}$

@@ -508,7 +508,7 @@ class CourseTabView(EdxFragmentView):
                 set_custom_metrics_for_course_key(course_key)
                 return super(CourseTabView, self).get(request, course=course, page_context=page_context, **kwargs)
             except Exception as exception:  # pylint: disable=broad-except
-                return CourseTabView.handle_exceptions(request, course, exception)
+                return CourseTabView.handle_exceptions(request, course_key, course, exception)
 
     @staticmethod
     def url_to_enroll(course_key):
@@ -559,14 +559,12 @@ class CourseTabView(EdxFragmentView):
                     )
 
     @staticmethod
-    def handle_exceptions(request, course, exception):
+    def handle_exceptions(request, course_key, course, exception):
         """
         Handle exceptions raised when rendering a view.
         """
         if isinstance(exception, Redirect) or isinstance(exception, Http404):
             raise
-        if isinstance(exception, UnicodeEncodeError):
-            raise Http404("URL contains Unicode characters")
         if settings.DEBUG:
             raise
         user = request.user
@@ -575,7 +573,7 @@ class CourseTabView(EdxFragmentView):
             request.path,
             getattr(user, 'real_user', user),
             user,
-            text_type(course.id),
+            text_type(course_key),
         )
         try:
             return render_to_response(

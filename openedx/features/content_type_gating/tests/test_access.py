@@ -15,7 +15,13 @@ from openedx.core.djangoapps.waffle_utils.testutils import override_waffle_flag
 from openedx.core.lib.url_utils import quote_slashes
 from openedx.features.content_type_gating.partitions import CONTENT_GATING_PARTITION_ID
 from openedx.features.course_duration_limits.config import CONTENT_TYPE_GATING_FLAG
-from student.tests.factories import TEST_PASSWORD, AdminFactory, CourseEnrollmentFactory, UserFactory
+from student.tests.factories import (
+    AdminFactory,
+    CourseAccessRoleFactory,
+    CourseEnrollmentFactory,
+    UserFactory,
+    TEST_PASSWORD
+)
 from xmodule.modulestore.tests.django_utils import SharedModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory, ItemFactory
 
@@ -368,3 +374,27 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
         self.client.login(username=self.users[user].username, password=TEST_PASSWORD)
         response = self.client.post(url)
         self.assertEqual(response.status_code, status_code)
+
+    def test_access_course_team_users(self):
+        """
+        Test that members of the course team do not lose access to graded content
+        """
+        # There are two types of course team members:
+        #   instructor: they have admin access (they can add new users and create content)
+        #   staff: they do NOT have admin access
+        course_team_roles = ['instructor', 'staff']
+
+        for role in course_team_roles:
+            user = UserFactory.create()
+            CourseAccessRoleFactory.create(
+                user=user,
+                course_id=self.course.id,
+                role=role
+            )
+
+            self._assert_block_is_gated(
+                block=self.blocks_dict['problem'],
+                user_id=user.id,
+                course_id=self.course.id,
+                is_gated=True
+            )

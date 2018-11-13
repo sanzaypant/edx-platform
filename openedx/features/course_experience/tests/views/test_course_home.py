@@ -16,6 +16,7 @@ from waffle.models import Flag
 from waffle.testutils import override_flag
 
 from course_modes.models import CourseMode
+from course_modes.tests.factories import CourseModeFactory
 from courseware.tests.factories import StaffFactory
 from courseware.tests.helpers import get_expiration_banner_text
 from lms.djangoapps.commerce.models import CommerceConfiguration
@@ -31,7 +32,8 @@ from openedx.features.course_experience import (
     UNIFIED_COURSE_TAB_FLAG
 )
 from student.models import CourseEnrollment
-from student.tests.factories import UserFactory
+from student.roles import CourseInstructorRole, CourseStaffRole
+from student.tests.factories import CourseAccessRoleFactory, CourseEnrollmentFactory, UserFactory
 from util.date_utils import strftime_localized
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.tests.django_utils import CourseUserType, ModuleStoreTestCase, SharedModuleStoreTestCase
@@ -329,14 +331,23 @@ class TestCourseHomePageAccess(CourseHomePageTestCase):
         """
         Ensure that a user accessing an expired course sees a redirect to
         the student dashboard, not a 404.
+        And ensure that users who should not lose access get a 200 (ok) response
+        when attempting to visit the course after their would be expiration date.
         """
         three_years_ago = now() - timedelta(days=(365 * 3))
-        course = CourseFactory.create(start=three_years_ago)
-        user = self.create_user_for_course(course, CourseUserType.ENROLLED)
-        enrollment = CourseEnrollment.get_enrollment(user, course.id)
-        ScheduleFactory(start=three_years_ago, enrollment=enrollment)
 
+        course = CourseFactory.create(start=three_years_ago)
         url = course_home_url(course)
+
+        for mode in [CourseMode.AUDIT, CourseMode.VERIFIED]:
+            CourseModeFactory.create(course_id=course.id, mode_slug=mode)
+
+        # assert that an if an expired audit user tries to access the course they are redirected to the dashboard
+        audit_user = UserFactory(password=self.TEST_PASSWORD)
+        self.client.login(username=audit_user.username, password=self.TEST_PASSWORD)
+        audit_enrollment = CourseEnrollment.enroll(audit_user, course.id, mode=CourseMode.AUDIT)
+        ScheduleFactory(start=three_years_ago, enrollment=audit_enrollment)
+
         response = self.client.get(url)
 
         expiration_date = strftime_localized(course.start + timedelta(weeks=4), 'SHORT_DATE')
@@ -351,6 +362,40 @@ class TestCourseHomePageAccess(CourseHomePageTestCase):
             params=expected_params.urlencode()
         )
         self.assertRedirects(response, expected_url)
+
+        # certain types of users should not loose their access (i.e. course staff, verified users)
+        # create a list of those users, then assert that their access persists past the 'expiration date'
+        users_no_expired_access = []
+
+        verified_user = UserFactory(password=self.TEST_PASSWORD)
+        verified_enrollment = CourseEnrollment.enroll(verified_user, course.id, mode=CourseMode.AUDIT)
+        ScheduleFactory(start=three_years_ago, enrollment=verified_enrollment)
+        users_no_expired_access.append((verified_user, 'Verified Learner'))
+
+        # There are two types of course team members:
+        #   instructor: they have admin access (they can add new users and create content)
+        #   staff: they do NOT have admin access
+
+        instructor = UserFactory.create(password=self.TEST_PASSWORD)
+        enrollment = CourseEnrollment.enroll(instructor, course.id, mode=CourseMode.AUDIT)
+        CourseInstructorRole(course.id).add_users(instructor)
+        ScheduleFactory(start=three_years_ago, enrollment=enrollment)
+        users_no_expired_access.append((instructor, 'Course Instructor'))
+
+        staff = UserFactory.create(password=self.TEST_PASSWORD)
+        enrollment = CourseEnrollment.enroll(staff, course.id, mode=CourseMode.AUDIT)
+        CourseStaffRole(course.id).add_users(staff)
+        ScheduleFactory(start=three_years_ago, enrollment=enrollment)
+        users_no_expired_access.append((staff, 'Course Staff'))
+
+        for user, user_description in users_no_expired_access:
+            self.client.login(username=user.username, password=self.TEST_PASSWORD)
+            response = self.client.get(url)
+            self.assertEqual(
+                response.status_code,
+                200,
+                "Should not expire access for user [{}]".format(user_description)
+            )
 
     @mock.patch.dict(settings.FEATURES, {'DISABLE_START_DATES': False})
     @mock.patch("util.date_utils.strftime_localized")

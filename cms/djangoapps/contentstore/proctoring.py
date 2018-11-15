@@ -79,7 +79,7 @@ def register_special_exams(course_key):
             'is_proctored':timed_exam.is_proctored_exam,
             'is_practice_exam':timed_exam.is_practice_exam,
             'is_active':True,
-            'hide_after_due':timed_exam.hide_after_due
+            'hide_after_due':timed_exam.hide_after_due,
         }
 
         if ENABLE_PROCTORING_PROVIDER_OVERRIDES.is_enabled(course_key):

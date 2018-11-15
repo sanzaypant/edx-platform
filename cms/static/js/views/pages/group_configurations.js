@@ -8,7 +8,8 @@ function($, _, gettext, BasePage, GroupConfigurationsListView, PartitionGroupLis
         initialize: function(options) {
             var currentScheme,
                 i,
-                enrollmentScheme = 'enrollment_track';
+                enrollmentScheme = 'enrollment_track',
+                contentTypeGatingScheme = 'content_type_gate';
 
             BasePage.prototype.initialize.call(this);
             this.experimentsEnabled = options.experimentsEnabled;
@@ -26,7 +27,7 @@ function($, _, gettext, BasePage, GroupConfigurationsListView, PartitionGroupLis
                 this.allGroupViewList.push(
                     new PartitionGroupListView({
                         collection: this.allGroupConfigurations[i].get('groups'),
-                        restrictEditing: currentScheme === enrollmentScheme,
+                        restrictEditing: currentScheme === enrollmentScheme || currentScheme === contentTypeGatingScheme,
                         scheme: currentScheme
                     })
                 );

@@ -103,7 +103,7 @@ def register_course_expired_message(request, course):
     """
     Add a banner notifying the user of the user course expiration date if it exists.
     """
-    if CourseDurationLimitConfig.enabled_for_course(course_key=course.id):
+    if CourseDurationLimitConfig.enabled_for_enrollment(user=request.user, course_key=course.id):
         expiration_date = get_user_course_expiration_date(request.user, course)
         if expiration_date:
             upgrade_message = _('Your access to this course expires on {expiration_date}. \

@@ -66,5 +66,7 @@ class CourseDurationLimitConfig(StackedConfigurationModel):
         if today is None:
             today = datetime.utcnow().date()
 
+        print(self.enabled, self.enabled_as_of, today)
+
         return bool(self.enabled and self.enabled_as_of <= today)
 

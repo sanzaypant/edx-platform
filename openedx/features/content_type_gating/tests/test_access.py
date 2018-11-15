@@ -157,6 +157,8 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
             mode='audit'
         )
 
+        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
+
     @classmethod
     def _create_course(cls, run, display_name, modes, component_types):
         """
@@ -214,18 +216,10 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                 )
                 blocks_dict[problem_type] = block
 
-<<<<<<< HEAD
             return {
                 'course': course,
                 'blocks': blocks_dict,
             }
-=======
-    def setUp(self):
-        super(TestProblemTypeAccess, self).setUp()
-        self.audit_user = UserFactory.create()
-        self.enrollment = CourseEnrollmentFactory.create(user=self.audit_user, course_id=self.course.id, mode='audit')
-        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
->>>>>>> Add StackedConfigurationModels for managing content_type_gating and course_duration_limits
 
     @patch("crum.get_current_request")
     def _assert_block_is_gated(self, mock_get_current_request, block, is_gated, user_id, course_id):
@@ -251,13 +245,12 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                           wraps=IncorrectPartitionGroupError.__init__) as mock_access_error:
             if is_gated:
                 with self.assertRaises(Http404):
-<<<<<<< HEAD
                     load_single_xblock(
                         request=fake_request,
                         user_id=user_id,
                         course_id=unicode(course_id),
                         usage_key_string=unicode(block.scope_ids.usage_id),
-                        course=None
+                        course=self.course
                     )
                 # check that has_access raised the IncorrectPartitionGroupError in order to gate the block
                 self.assertTrue(mock_access_error.called)
@@ -267,17 +260,8 @@ class TestProblemTypeAccess(SharedModuleStoreTestCase):
                     user_id=user_id,
                     course_id=unicode(course_id),
                     usage_key_string=unicode(block.scope_ids.usage_id),
-                    course=None
+                    course=self.course
                 )
-=======
-                    block = load_single_xblock(fake_request, self.audit_user.id, unicode(self.course.id),
-                                               unicode(block.scope_ids.usage_id), course=self.course)
-                # check that has_access raised the IncorrectPartitionGroupError in order to gate the block
-                self.assertTrue(mock_access_error.called)
-            else:
-                block = load_single_xblock(fake_request, self.audit_user.id, unicode(self.course.id),
-                                           unicode(block.scope_ids.usage_id), course=self.course)
->>>>>>> Add StackedConfigurationModels for managing content_type_gating and course_duration_limits
                 # check that has_access did not raise the IncorrectPartitionGroupError thereby not gating the block
                 self.assertFalse(mock_access_error.called)
 

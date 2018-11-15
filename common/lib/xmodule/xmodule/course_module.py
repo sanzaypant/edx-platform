@@ -16,7 +16,7 @@ from openedx.core.djangoapps.video_pipeline.models import VideoUploadsEnabledByD
 from openedx.core.lib.license import LicenseMixin
 from path import Path as path
 from pytz import utc
-from six import text_type
+from six import text_type, iteritems
 from xblock.fields import Scope, List, String, Dict, Boolean, Integer, Float
 
 from xmodule import course_metadata_utils
@@ -47,25 +47,6 @@ DEFAULT_MOBILE_AVAILABLE = getattr(settings, 'DEFAULT_MOBILE_AVAILABLE', False)
 COURSE_VISIBILITY_PRIVATE = 'private'
 COURSE_VISIBILITY_PUBLIC_OUTLINE = 'public_outline'
 COURSE_VISIBILITY_PUBLIC = 'public'
-PROCTORING_BACKENDS_SETTINGS = getattr(
-    settings, 
-    'PROCTORING_BACKENDS', 
-    None
-)
-if PROCTORING_BACKENDS_SETTINGS:
-    DEFAULT_PROCTORING_PROVIDER = PROCTORING_BACKENDS_SETTINGS.get('DEFAULT', None)
-
-    try:
-        DEFAULT_PROCTORING_RULES = PROCTORING_BACKENDS_SETTINGS[DEFAULT_PROCTORING_PROVIDER]['default_config']
-    except KeyError:
-        DEFAULT_PROCTORING_RULES = {}
-
-    # if DEFAULT_PROCTORING_PROVIDER and DEFAULT_PROCTORING_PROVIDER in PROCTORING_BACKENDS_SETTINGS:
-    #     DEFAULT_PROCTORING_PROVIDER_SETTINGS = PROCTORING_BACKENDS_SETTINGS[DEFAULT_PROCTORING_PROVIDER]
-        
-    #     if DEFAULT_PROCTORING_PROVIDER_SETTINGS and 'default_config' in DEFAULT_PROCTORING_PROVIDER_SETTINGS:
-    #         DEFAULT_PROCTORING_RULES = DEFAULT_PROCTORING_PROVIDER_SETTINGS['default_config']
-
 
 class StringOrDate(Date):
     def from_json(self, value):
@@ -199,6 +180,108 @@ class TextbookList(List):
             else:
                 continue
         return json_data
+
+class ProctoringConfiguration(Dict):
+    def from_json(self, value):
+        errors = []
+        value = super(ProctoringConfiguration, self).from_json(value)
+        proctoring_backend_settings = getattr(
+            settings,
+            'PROCTORING_BACKENDS',
+            None
+        )
+
+        backend_errors = self._validate_proctoring_backend(value, proctoring_backend_settings)
+        rules_errors = self._validate_proctoring_rules(value, proctoring_backend_settings)
+
+        errors.extend(backend_errors)
+        errors.extend(rules_errors)
+
+        if errors:
+            # just raise the list, and then let the alert decide to present it a particular way
+            raise ValueError(errors)
+
+        value = self._get_proctoring_value(value, proctoring_backend_settings)
+
+        return value
+
+    def _get_proctoring_value(self, value, proctoring_backend_settings):
+        proctoring_provider = value.get('backend', None)
+        proctoring_provider_rules = value.get('rules', None)
+        proctoring_provider_rules_set = proctoring_backend_settings.get(
+            proctoring_provider, {}).get('default_config',
+            None
+        )
+
+        if not proctoring_provider_rules_set:
+            # if there are no platform default rules set for the provider, pass back empty dictionary for rules
+            value['rules'] = {}
+        else:
+            for default_rule, is_enabled in iteritems(proctoring_provider_rules_set):
+                if default_rule not in proctoring_provider_rules:
+                        proctoring_provider_rules[default_rule] = is_enabled
+        return value
+
+
+    def _validate_proctoring_backend(self, value, proctoring_backend_settings):
+        errors = []
+
+        proctoring_provider_whitelist = [provider for provider in proctoring_backend_settings if provider != 'DEFAULT']
+        proctoring_provider = value.get('backend', None)
+
+        if not proctoring_provider or proctoring_provider not in proctoring_provider_whitelist:
+            errors.append('The selected proctoring backend, {}, is not a valid backend. Please select from one of {}.'.
+                format(proctoring_provider, proctoring_provider_whitelist)
+            )
+
+        return errors
+
+    def _validate_proctoring_rules(self, value, proctoring_backend_settings):
+        errors = []
+
+        proctoring_provider = value.get('backend', None)
+        proctoring_provider_rules = value.get('rules', None)
+        proctoring_provider_rules_set = proctoring_backend_settings.get(
+            proctoring_provider, {}).get('default_config',
+            None
+        )
+
+        if proctoring_provider_rules and proctoring_provider_rules_set:
+            for rule, is_enabled in iteritems(proctoring_provider_rules):
+                if not isinstance(is_enabled, bool):
+                    errors.append('The value for proctoring configuration rule {} should be either true or false.'.
+                        format(rule)
+                    )
+                if rule not in proctoring_provider_rules_set:
+                    errors.append('The proctoring configuration rule {} is not a valid rule for provider {}.'.
+                        format(rule, proctoring_provider)
+                    )
+
+        return errors
+
+    @property
+    def default(self):
+        default = super(ProctoringConfiguration, self).default
+
+        proctoring_backend_settings = getattr(
+            settings,
+            'PROCTORING_BACKENDS',
+            None
+        )
+
+        if proctoring_backend_settings:
+            default_proctoring_provider = proctoring_backend_settings.get('DEFAULT', None)
+
+            try:
+                default_proctoring_rules = proctoring_backend_settings[default_proctoring_provider]['default_config']
+            except KeyError:
+                default_proctoring_rules = {}
+
+            return {
+                'backend': default_proctoring_provider,
+                'rules': default_proctoring_rules,
+            }
+        return default
 
 
 class CourseFields(object):
@@ -756,22 +839,12 @@ class CourseFields(object):
         scope=Scope.settings
     )
 
-    proctoring_provider = String(
-        display_name=_("Proctoring Provider"),
+    proctoring_configuration = ProctoringConfiguration(
+        display_name=_("Proctoring Configuration"),
         help=_(
-            "Enter a proctoring provider."
+            "Enter a proctoring configuration."
         ),
-        default=DEFAULT_PROCTORING_PROVIDER,
-        scope=Scope.settings
-    )
-
-    proctoring_rules = Dict(
-         display_name=_("Proctoring Rules"),
-        help=_(
-            "Enter proctoring rules."
-        ),
-        default=DEFAULT_PROCTORING_RULES,
-        scope=Scope.settings
+        scope=Scope.settings,
     )
 
     allow_proctoring_opt_out = Boolean(

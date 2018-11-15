@@ -1192,7 +1192,6 @@ def grading_handler(request, course_key_string, grader_index=None):
     course_key = CourseKey.from_string(course_key_string)
     with modulestore().bulk_operations(course_key):
         course_module = get_course_and_check_access(course_key, request.user)
-
         if 'text/html' in request.META.get('HTTP_ACCEPT', '') and request.method == 'GET':
             course_details = CourseGradingModel.fetch(course_key)
 
@@ -1291,7 +1290,7 @@ def advanced_settings_handler(request, course_key_string):
 
             return render_to_response('settings_advanced.html', {
                 'context_course': course_module,
-                'advanced_dict': CourseMetadata.fetch(course_module, course_key),
+                'advanced_dict': CourseMetadata.fetch(course_module),
                 'advanced_settings_url': reverse_course_url('advanced_settings_handler', course_key)
             })
         elif 'application/json' in request.META.get('HTTP_ACCEPT', ''):

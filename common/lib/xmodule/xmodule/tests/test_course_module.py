@@ -9,6 +9,8 @@ from fs.memoryfs import MemoryFS
 from mock import Mock, patch
 from pytz import utc
 from xblock.runtime import KvsFieldData, DictKeyValueStore
+from django.conf import settings
+from django.test import override_settings
 
 import xmodule.course_module
 from xmodule.modulestore.xml import ImportSystem, XMLModuleStore
@@ -419,3 +421,72 @@ class CourseDescriptorTestCase(unittest.TestCase):
         """
         expected_certificate_available_date = self.course.end + timedelta(days=2)
         self.assertEqual(expected_certificate_available_date, self.course.certificate_available_date)
+
+
+class ProctoringConfigurationTestCase(unittest.TestCase):
+    shard = 1
+
+    def setUp(self):
+        """
+        Initialize dummy testing course.
+        """
+        super(ProctoringConfigurationTestCase, self).setUp()
+        # self.course = get_dummy_course(start=_TODAY, end=_NEXT_WEEK)
+        self.proctoring_configuration = xmodule.course_module.ProctoringConfiguration()
+
+    # def test_from_json_with_platform_default(self):
+    #     value = {
+    #         'backend': settings.PROCTORING_BACKENDS.get('DEFAULT')
+    #         'rules': settings.PROCTORING_BACKENDS[default_provider]['default_config']
+    #     }
+
+    #     x = self.proctoring_configuration.from_json(value)
+
+    #     exp
+
+    def test_default_with_platform_default_with_rules(self):
+        default_provider = settings.PROCTORING_BACKENDS.get('DEFAULT')
+        default_rules = settings.PROCTORING_BACKENDS[default_provider]['default_config']
+
+        expected_default = {
+            'backend': default_provider,
+            'rules': default_rules
+        }
+
+        default = self.proctoring_configuration.default
+
+        self. assertEqual(expected_default, default)
+    
+    @override_settings(PROCTORING_BACKENDS={
+    'DEFAULT': 'mock_proctoring_with_rules',
+    'mock_proctoring_with_rules': {
+        'client_id': 'secret_id',
+        'client_secret': 'secret_key',
+        'default_config': {
+            'allow_snarfing': True,
+            'allow_grok': False
+        }
+    },
+    'mock_proctoring_without_rules': {
+        'client_id': 'secret_id',
+        'client_secret': 'secret_key',
+    }})
+    def test_default_with_platform_default_without_rules(self):
+        default_provider = 'mock_proctoring_without_rules'
+        default_rules = {}
+
+        expected_default = {
+            'backend': default_provider,
+            'rules': default_rules
+        }
+
+        default = self.proctoring_configuration.default
+
+        self.assertEqual(expected_default, default)
+        
+    def test_default_default_with_no_platform_default(self):
+        # I don't think I'm supposed to modify Django settings... which either means
+        #   a. This code path is unnecessary. If so, what do I do in the event a DEFAULT is missing?
+        #   b. I don't write this test, which would leave a code path uncovered.
+        #   c. I modify Django settings, despite advice on the Internet.
+        return

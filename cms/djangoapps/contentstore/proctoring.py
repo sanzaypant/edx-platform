@@ -19,6 +19,7 @@ from edx_proctoring.exceptions import ProctoredExamNotFoundException, ProctoredE
 from contentstore.views.helpers import is_item_in_course_tree
 from xmodule.modulestore.django import modulestore
 from xmodule.modulestore.exceptions import ItemNotFoundError
+from cms.djangoapps.contentstore.config.waffle import ENABLE_PROCTORING_PROVIDER_OVERRIDES
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +31,6 @@ def register_special_exams(course_key):
     subsystem. Likewise, if formerly registered exams are unmarked, then those
     registered exams are marked as inactive
     """
-
     if not settings.FEATURES.get('ENABLE_SPECIAL_EXAMS'):
         # if feature is not enabled then do a quick exit
         return
@@ -72,52 +72,55 @@ def register_special_exams(course_key):
         )
         log.info(msg)
 
+        exam_metadata = {
+            'exam_name':timed_exam.display_name,
+            'time_limit_mins':timed_exam.default_time_limit_minutes,
+            'due_date':timed_exam.due,
+            'is_proctored':timed_exam.is_proctored_exam,
+            'is_practice_exam':timed_exam.is_practice_exam,
+            'is_active':True,
+            'hide_after_due':timed_exam.hide_after_due
+        }
+
+        if ENABLE_PROCTORING_PROVIDER_OVERRIDES.is_enabled(course_key):
+            exam_metadata['backend'] = course.proctoring_configuration.get('backend', None)
+
         try:
             exam = get_exam_by_content_id(unicode(course_key), unicode(timed_exam.location))
             # update case, make sure everything is synced
-            exam_id = update_exam(
-                exam_id=exam['id'],
-                exam_name=timed_exam.display_name,
-                time_limit_mins=timed_exam.default_time_limit_minutes,
-                due_date=timed_exam.due,
-                is_proctored=timed_exam.is_proctored_exam,
-                is_practice_exam=timed_exam.is_practice_exam,
-                is_active=True,
-                hide_after_due=timed_exam.hide_after_due,
-            )
+            exam_metadata['exam_id'] = exam['id']
+
+            exam_id = update_exam(**exam_metadata)
             msg = 'Updated timed exam {exam_id}'.format(exam_id=exam['id'])
             log.info(msg)
 
         except ProctoredExamNotFoundException:
-            exam_id = create_exam(
-                course_id=unicode(course_key),
-                content_id=unicode(timed_exam.location),
-                exam_name=timed_exam.display_name,
-                time_limit_mins=timed_exam.default_time_limit_minutes,
-                due_date=timed_exam.due,
-                is_proctored=timed_exam.is_proctored_exam,
-                is_practice_exam=timed_exam.is_practice_exam,
-                is_active=True,
-                hide_after_due=timed_exam.hide_after_due,
-            )
+            exam_metadata['course_id'] = unicode(course_key)
+            exam_metadata['content_id'] = unicode(timed_exam.location)
+
+            exam_id = create_exam(**exam_metadata)
             msg = 'Created new timed exam {exam_id}'.format(exam_id=exam_id)
             log.info(msg)
+
+        exam_review_policy_metadata = {
+            'exam_id':exam_id,
+            'set_by_user_id':timed_exam.edited_by,
+            'review_policy':timed_exam.exam_review_rules
+        }
+
+        if ENABLE_PROCTORING_PROVIDER_OVERRIDES.is_enabled(course_key):
+            exam_review_policy_metadata['rules'] = course.proctoring_configuration.get('rules', None)
 
         # only create/update exam policy for the proctored exams
         if timed_exam.is_proctored_exam and not timed_exam.is_practice_exam:
             try:
-                update_review_policy(
-                    exam_id=exam_id,
-                    set_by_user_id=timed_exam.edited_by,
-                    review_policy=timed_exam.exam_review_rules
-                )
+                update_review_policy(**exam_review_policy_metadata)
             except ProctoredExamReviewPolicyNotFoundException:
-                if timed_exam.exam_review_rules:  # won't save an empty rule.
-                    create_exam_review_policy(
-                        exam_id=exam_id,
-                        set_by_user_id=timed_exam.edited_by,
-                        review_policy=timed_exam.exam_review_rules
-                    )
+                exam_review_policy_has_rules = (ENABLE_PROCTORING_PROVIDER_OVERRIDES.is_enabled(course_key)
+                and exam_review_policy_metadata.get('rules', None))
+
+                if timed_exam.exam_review_rules or exam_review_policy_has_rules:  # won't save an empty rule.
+                    create_exam_review_policy(**exam_review_policy_metadata)
                     msg = 'Created new exam review policy with exam_id {exam_id}'.format(exam_id=exam_id)
                     log.info(msg)
         else:

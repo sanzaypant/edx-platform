@@ -12,6 +12,9 @@ from pytz import UTC
 from contentstore.signals.handlers import listen_for_course_publish
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import CourseFactory, ItemFactory
+from waffle.testutils import override_flag
+from openedx.core.djangoapps.waffle_utils.testutils import override_waffle_flag
+from cms.djangoapps.contentstore.config.waffle import ENABLE_PROCTORING_PROVIDER_OVERRIDES
 
 
 @ddt.ddt
@@ -54,6 +57,7 @@ class TestProctoredExams(ModuleStoreTestCase):
             # the hide after due value only applies to timed exams
             self.assertEqual(exam['hide_after_due'], sequence.hide_after_due)
 
+        # import pdb; pdb.set_trace()
         self.assertEqual(exam['course_id'], unicode(self.course.id))
         self.assertEqual(exam['content_id'], unicode(sequence.location))
         self.assertEqual(exam['exam_name'], sequence.display_name)
@@ -75,162 +79,162 @@ class TestProctoredExams(ModuleStoreTestCase):
         Happy path testing to see that when a course is published which contains
         a proctored exam, it will also put an entry into the exam tables
         """
+        with override_waffle_flag(ENABLE_PROCTORING_PROVIDER_OVERRIDES, active=True):
+            chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
+            sequence = ItemFactory.create(
+                parent=chapter,
+                category='sequential',
+                display_name='Test Proctored Exam',
+                graded=True,
+                is_time_limited=is_time_limited,
+                default_time_limit_minutes=default_time_limit_minutes,
+                is_proctored_exam=is_proctored_exam,
+                is_practice_exam=is_practice_exam,
+                due=datetime.now(UTC) + timedelta(minutes=default_time_limit_minutes + 1),
+                exam_review_rules="allow_use_of_paper",
+                hide_after_due=hide_after_due,
+            )
 
-        chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
-        sequence = ItemFactory.create(
-            parent=chapter,
-            category='sequential',
-            display_name='Test Proctored Exam',
-            graded=True,
-            is_time_limited=is_time_limited,
-            default_time_limit_minutes=default_time_limit_minutes,
-            is_proctored_exam=is_proctored_exam,
-            is_practice_exam=is_practice_exam,
-            due=datetime.now(UTC) + timedelta(minutes=default_time_limit_minutes + 1),
-            exam_review_rules="allow_use_of_paper",
-            hide_after_due=hide_after_due,
-        )
-
-        listen_for_course_publish(self, self.course.id)
-
-        self._verify_exam_data(sequence, expected_active)
-
-        if republish:
-            # update the sequence
-            sequence.default_time_limit_minutes += sequence.default_time_limit_minutes
-            self.store.update_item(sequence, self.user.id)
-
-            # simulate a publish
             listen_for_course_publish(self, self.course.id)
 
-            # reverify
+            import pdb; pdb.set_trace()
             self._verify_exam_data(sequence, expected_active)
 
-    def test_unpublishing_proctored_exam(self):
-        """
-        Make sure that if we publish and then unpublish a proctored exam,
-        the exam record stays, but is marked as is_active=False
-        """
+            if republish:
+                # update the sequence
+                sequence.default_time_limit_minutes += sequence.default_time_limit_minutes
+                self.store.update_item(sequence, self.user.id)
 
-        chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
-        sequence = ItemFactory.create(
-            parent=chapter,
-            category='sequential',
-            display_name='Test Proctored Exam',
-            graded=True,
-            is_time_limited=True,
-            default_time_limit_minutes=10,
-            is_proctored_exam=True,
-            hide_after_due=False,
-        )
+                # simulate a publish
+                listen_for_course_publish(self, self.course.id)
 
-        listen_for_course_publish(self, self.course.id)
+                # reverify
+                self._verify_exam_data(sequence, expected_active)
 
-        exams = get_all_exams_for_course(unicode(self.course.id))
-        self.assertEqual(len(exams), 1)
+    # def test_unpublishing_proctored_exam(self):
+    #     """
+    #     Make sure that if we publish and then unpublish a proctored exam,
+    #     the exam record stays, but is marked as is_active=False
+    #     """
 
-        sequence.is_time_limited = False
-        sequence.is_proctored_exam = False
+    #     chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
+    #     sequence = ItemFactory.create(
+    #         parent=chapter,
+    #         category='sequential',
+    #         display_name='Test Proctored Exam',
+    #         graded=True,
+    #         is_time_limited=True,
+    #         default_time_limit_minutes=10,
+    #         is_proctored_exam=True,
+    #         hide_after_due=False,
+    #     )
 
-        self.store.update_item(sequence, self.user.id)
+    #     listen_for_course_publish(self, self.course.id)
 
-        listen_for_course_publish(self, self.course.id)
+    #     exams = get_all_exams_for_course(unicode(self.course.id))
+    #     self.assertEqual(len(exams), 1)
 
-        self._verify_exam_data(sequence, False)
+    #     sequence.is_time_limited = False
+    #     sequence.is_proctored_exam = False
 
-    def test_dangling_exam(self):
-        """
-        Make sure we filter out all dangling items
-        """
+    #     self.store.update_item(sequence, self.user.id)
 
-        chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
-        ItemFactory.create(
-            parent=chapter,
-            category='sequential',
-            display_name='Test Proctored Exam',
-            graded=True,
-            is_time_limited=True,
-            default_time_limit_minutes=10,
-            is_proctored_exam=True,
-            hide_after_due=False,
-        )
+    #     listen_for_course_publish(self, self.course.id)
 
-        listen_for_course_publish(self, self.course.id)
+    #     self._verify_exam_data(sequence, False)
 
-        exams = get_all_exams_for_course(unicode(self.course.id))
-        self.assertEqual(len(exams), 1)
+    # def test_dangling_exam(self):
+    #     """
+    #     Make sure we filter out all dangling items
+    #     """
 
-        self.store.delete_item(chapter.location, self.user.id)
+    #     chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
+    #     ItemFactory.create(
+    #         parent=chapter,
+    #         category='sequential',
+    #         display_name='Test Proctored Exam',
+    #         graded=True,
+    #         is_time_limited=True,
+    #         default_time_limit_minutes=10,
+    #         is_proctored_exam=True,
+    #         hide_after_due=False,
+    #     )
 
-        # republish course
-        listen_for_course_publish(self, self.course.id)
+    #     listen_for_course_publish(self, self.course.id)
 
-        # look through exam table, the dangling exam
-        # should be disabled
-        exams = get_all_exams_for_course(unicode(self.course.id))
-        self.assertEqual(len(exams), 1)
+    #     exams = get_all_exams_for_course(unicode(self.course.id))
+    #     self.assertEqual(len(exams), 1)
 
-        exam = exams[0]
-        self.assertEqual(exam['is_active'], False)
+    #     self.store.delete_item(chapter.location, self.user.id)
 
-    @patch.dict('django.conf.settings.FEATURES', {'ENABLE_SPECIAL_EXAMS': False})
-    def test_feature_flag_off(self):
-        """
-        Make sure the feature flag is honored
-        """
+    #     # republish course
+    #     listen_for_course_publish(self, self.course.id)
 
-        chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
-        ItemFactory.create(
-            parent=chapter,
-            category='sequential',
-            display_name='Test Proctored Exam',
-            graded=True,
-            is_time_limited=True,
-            default_time_limit_minutes=10,
-            is_proctored_exam=True,
-            hide_after_due=False,
-        )
+    #     # look through exam table, the dangling exam
+    #     # should be disabled
+    #     exams = get_all_exams_for_course(unicode(self.course.id))
+    #     self.assertEqual(len(exams), 1)
 
-        listen_for_course_publish(self, self.course.id)
+    #     exam = exams[0]
+    #     self.assertEqual(exam['is_active'], False)
 
-        exams = get_all_exams_for_course(unicode(self.course.id))
-        self.assertEqual(len(exams), 0)
+    # @patch.dict('django.conf.settings.FEATURES', {'ENABLE_SPECIAL_EXAMS': False})
+    # def test_feature_flag_off(self):
+    #     """
+    #     Make sure the feature flag is honored
+    #     """
+    #     chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
+    #     ItemFactory.create(
+    #         parent=chapter,
+    #         category='sequential',
+    #         display_name='Test Proctored Exam',
+    #         graded=True,
+    #         is_time_limited=True,
+    #         default_time_limit_minutes=10,
+    #         is_proctored_exam=True,
+    #         hide_after_due=False,
+    #     )
 
-    @ddt.data(
-        (True, False, 1),
-        (False, True, 1),
-        (False, False, 0),
-    )
-    @ddt.unpack
-    def test_advanced_settings(self, enable_timed_exams, enable_proctored_exams, expected_count):
-        """
-        Make sure the feature flag is honored
-        """
+    #     listen_for_course_publish(self, self.course.id)
 
-        self.course = CourseFactory.create(
-            org='edX',
-            course='901',
-            run='test_run2',
-            enable_proctored_exams=enable_proctored_exams,
-            enable_timed_exams=enable_timed_exams
-        )
+    #     exams = get_all_exams_for_course(unicode(self.course.id))
+    #     self.assertEqual(len(exams), 0)
 
-        chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
-        ItemFactory.create(
-            parent=chapter,
-            category='sequential',
-            display_name='Test Proctored Exam',
-            graded=True,
-            is_time_limited=True,
-            default_time_limit_minutes=10,
-            is_proctored_exam=True,
-            exam_review_rules="allow_use_of_paper",
-            hide_after_due=False,
-        )
+    # @ddt.data(
+    #     (True, False, 1),
+    #     (False, True, 1),
+    #     (False, False, 0),
+    # )
+    # @ddt.unpack
+    # def test_advanced_settings(self, enable_timed_exams, enable_proctored_exams, expected_count):
+    #     """
+    #     Make sure the feature flag is honored
+    #     """
 
-        listen_for_course_publish(self, self.course.id)
+    #     self.course = CourseFactory.create(
+    #         org='edX',
+    #         course='901',
+    #         run='test_run2',
+    #         enable_proctored_exams=enable_proctored_exams,
+    #         enable_timed_exams=enable_timed_exams
+    #     )
 
-        # there shouldn't be any exams because we haven't enabled that
-        # advanced setting flag
-        exams = get_all_exams_for_course(unicode(self.course.id))
-        self.assertEqual(len(exams), expected_count)
+    #     chapter = ItemFactory.create(parent=self.course, category='chapter', display_name='Test Section')
+    #     ItemFactory.create(
+    #         parent=chapter,
+    #         category='sequential',
+    #         display_name='Test Proctored Exam',
+    #         graded=True,
+    #         is_time_limited=True,
+    #         default_time_limit_minutes=10,
+    #         is_proctored_exam=True,
+    #         exam_review_rules="allow_use_of_paper",
+    #         hide_after_due=False,
+    #     )
+
+    #     listen_for_course_publish(self, self.course.id)
+
+    #     # there shouldn't be any exams because we haven't enabled that
+    #     # advanced setting flag
+    #     exams = get_all_exams_for_course(unicode(self.course.id))
+    #     self.assertEqual(len(exams), expected_count)

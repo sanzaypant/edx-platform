@@ -729,8 +729,7 @@ class StudentDashboardTests(SharedModuleStoreTestCase, MilestonesTestCaseMixin, 
         Links will be removed from the course title, course image and button (View Course/Resume Course).
         The course card should have an access expired message.
         """
-        config = ContentTypeGatingConfig(enabled=True, enabled_as_of=date(2018, 1, 1))
-        config.save()
+        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
         self.override_waffle_switch(True)
 
         course = CourseFactory.create(start=self.THREE_YEARS_AGO)

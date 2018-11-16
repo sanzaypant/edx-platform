@@ -36,32 +36,25 @@ class TestContentTypeGatingConfig(CacheIsolationTestCase):
         pass_enrollment,
         enrolled_before_enabled,
     ):
+
+        if enrolled_before_enabled:
+            enabled_as_of = date.today() + timedelta(days=1)
+        else:
+            enabled_as_of = date.today() - timedelta(days=1)
+
         config = ContentTypeGatingConfig.objects.create(
             enabled=True,
             course=self.course_overview,
-            enabled_as_of=date(2018, 1, 1),
+            enabled_as_of=enabled_as_of,
         )
 
         if already_enrolled:
-            if enrolled_before_enabled:
-                enrollment_create_date = config.enabled_as_of - timedelta(days=1)
-            else:
-                enrollment_create_date = config.enabled_as_of + timedelta(days=1)
-
-            today = None
-
             existing_enrollment = CourseEnrollmentFactory.create(
                 user=self.user,
                 course=self.course_overview,
             )
-            existing_enrollment.created = datetime.combine(enrollment_create_date, time())
-            existing_enrollment.save()
         else:
             existing_enrollment = None
-            if enrolled_before_enabled:
-                today = config.enabled_as_of - timedelta(days=1)
-            else:
-                today = config.enabled_as_of + timedelta(days=1)
 
         if pass_enrollment:
             enrollment = existing_enrollment
@@ -82,7 +75,6 @@ class TestContentTypeGatingConfig(CacheIsolationTestCase):
                 enrollment=enrollment,
                 user=user,
                 course_key=course_key,
-                today=today,
             )
             self.assertEqual(not enrolled_before_enabled, enabled)
 
@@ -113,9 +105,9 @@ class TestContentTypeGatingConfig(CacheIsolationTestCase):
         )
 
         if before_enabled:
-            today = config.enabled_as_of - timedelta(days=1)
+            target_date = config.enabled_as_of - timedelta(days=1)
         else:
-            today = config.enabled_as_of + timedelta(days=1)
+            target_date = config.enabled_as_of + timedelta(days=1)
 
         course_key = self.course_overview.id
 
@@ -123,7 +115,7 @@ class TestContentTypeGatingConfig(CacheIsolationTestCase):
             not before_enabled,
             ContentTypeGatingConfig.enabled_for_course(
                 course_key=course_key,
-                today=today,
+                target_date=target_date,
             )
         )
 
@@ -133,7 +125,14 @@ class TestContentTypeGatingConfig(CacheIsolationTestCase):
     )
     @ddt.unpack
     def test_config_overrides(self, global_setting, site_setting, org_setting, course_setting):
-        # Set up disctractor objects
+        """
+        Test that the stacked configuration overrides happen in the correct order and priority.
+
+        This is tested by exhaustively setting each combination of contexts, and validating that only
+        the lowest level context that is set to not-None is applied.
+        """
+        # Add a bunch of configuration outside the contexts that are being tested, to make sure
+        # there are no leaks of configuration across contexts
         non_test_course_enabled = CourseOverviewFactory.create(org='non-test-org-enabled')
         non_test_course_disabled = CourseOverviewFactory.create(org='non-test-org-disabled')
         non_test_site_cfg_enabled = SiteConfigurationFactory.create(values={'course_org_filter': non_test_course_enabled.org})

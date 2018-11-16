@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils.translation import ugettext as _
+from django.utils.translation import ugettext_lazy as _
 
 from student.models import CourseEnrollment
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
@@ -20,11 +20,23 @@ class ContentTypeGatingConfig(StackedConfigurationModel):
 
     STACKABLE_FIELDS = ('enabled', 'enabled_as_of', 'studio_override_enabled')
 
-    enabled_as_of = models.DateField(default=None, null=True, verbose_name=_('Enabled As Of'), blank=True)
-    studio_override_enabled = models.NullBooleanField(default=None, verbose_name=_('Studio Override Enabled'), blank=True)
+
+    enabled_as_of = models.DateField(
+        default=None,
+        null=True,
+        verbose_name=_('Enabled As Of'),
+        blank=True,
+        help_text=_('If the configuration is Enabled, then all enrollments created after this date (UTC) will be affected.')
+    )
+    studio_override_enabled = models.NullBooleanField(
+        default=None,
+        verbose_name=_('Studio Override Enabled'),
+        blank=True,
+        help_text=_('Allow Feature Based Enrollment visibility to be overriden on a per-component basis in Studio.')
+    )
 
     @classmethod
-    def enabled_for_enrollment(cls, enrollment=None, user=None, course_key=None, today=None):
+    def enabled_for_enrollment(cls, enrollment=None, user=None, course_key=None):
         if CONTENT_TYPE_GATING_FLAG.is_enabled():
             return True
 
@@ -43,29 +55,32 @@ class ContentTypeGatingConfig(StackedConfigurationModel):
         if enrollment is None:
             enrollment = CourseEnrollment.get_enrollment(user, course_key)
 
+        # enrollment might be None if the user isn't enrolled. In that case,
+        # return enablement as if the user enrolled today
         if enrollment is None:
-            return cls.enabled_for_course(course_key=course_key, today=today)
+            return cls.enabled_for_course(course_key=course_key, target_date=datetime.utcnow().date())
         else:
             current_config = cls.current(course_key=enrollment.course_id)
-            return current_config.enabled_now(today=enrollment.created.date())
+            return current_config.enabled_as_of_date(target_date=enrollment.created.date())
 
     @classmethod
-    def enabled_for_course(cls, course_key, today=None):
+    def enabled_for_course(cls, course_key, target_date=None):
         if CONTENT_TYPE_GATING_FLAG.is_enabled():
             return True
 
+        if target_date is None:
+            target_date = datetime.utcnow().date()
+
         current_config = cls.current(course_key=course_key)
-        return current_config.enabled_now(today=today)
+        return current_config.enabled_as_of_date(target_date=target_date)
 
     def clean(self):
         if self.enabled and self.enabled_as_of is None:
             raise ValidationError({'enabled_as_of': _('enabled_as_of must be set when enabled is True')})
 
-    def enabled_now(self, today=None):
+    def enabled_as_of_date(self, target_date):
         if CONTENT_TYPE_GATING_FLAG.is_enabled():
             return True
 
-        if today is None:
-            today = datetime.utcnow().date()
-
-        return bool(self.enabled and self.enabled_as_of <= today)
+        # Explicitly cast this to bool, so that when self.enabled is None the method doesn't return None
+        return bool(self.enabled and self.enabled_as_of <= target_date)

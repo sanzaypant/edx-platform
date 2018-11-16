@@ -175,12 +175,12 @@ class TestCourseHomePage(CourseHomePageTestCase):
         """
         Verify that the view's query count doesn't regress.
         """
-        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
+        CourseDurationLimitConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
         # Pre-fetch the view to populate any caches
         course_home_url(self.course)
 
         # Fetch the view and verify the query counts
-        with self.assertNumQueries(69, table_blacklist=QUERY_COUNT_TABLE_BLACKLIST):
+        with self.assertNumQueries(84, table_blacklist=QUERY_COUNT_TABLE_BLACKLIST):
             with check_mongo_calls(4):
                 url = course_home_url(self.course)
                 self.client.get(url)
@@ -331,7 +331,7 @@ class TestCourseHomePageAccess(CourseHomePageTestCase):
         the student dashboard, not a 404.
         """
         three_years_ago = now() - timedelta(days=(365 * 3))
-        ContentTypeGatingConfig.objects.create(enabled=True, enabled_as_of=date(2010, 1, 1))
+        CourseDurationLimitConfig.objects.create(enabled=True, enabled_as_of=date(2010, 1, 1))
         course = CourseFactory.create(start=three_years_ago)
         user = self.create_user_for_course(course, CourseUserType.ENROLLED)
         enrollment = CourseEnrollment.get_enrollment(user, course.id)
@@ -423,14 +423,20 @@ class TestCourseHomePageAccess(CourseHomePageTestCase):
         self.assertNotContains(response, TEST_COURSE_HOME_MESSAGE_PRE_START)
 
         # Verify that enrolled users are shown the course expiration banner if content gating is enabled
-        CourseDurationLimitConfig.objects.create(enabled=True, enabled_as_of=date(2018, 1, 1))
+
+        # We use .save() explicitly here (rather than .objects.create) in order to force the
+        # cache to refresh.
+        config = CourseDurationLimitConfig(course=CourseOverview.get_from_id(self.course.id), enabled=True, enabled_as_of=date(2018, 1, 1))
+        config.save()
+
         url = course_home_url(self.course)
         response = self.client.get(url)
         bannerText = get_expiration_banner_text(user, self.course)
         self.assertContains(response, bannerText, html=True)
 
         # Verify that enrolled users are not shown the course expiration banner if content gating is disabled
-        CourseDurationLimitConfig.objects.create(enabled=False)
+        config.enabled = False
+        config.save()
         url = course_home_url(self.course)
         response = self.client.get(url)
         bannerText = get_expiration_banner_text(user, self.course)

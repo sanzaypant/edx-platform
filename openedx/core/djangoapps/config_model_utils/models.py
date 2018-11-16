@@ -87,7 +87,7 @@ class StackedConfigurationModel(ConfigurationModel):
             specified down to the level of the supplied argument (or global values if
             no arguments are supplied).
         """
-        cache_key_name = cls.cache_key_name(site, org, course_key)
+        cache_key_name = cls.cache_key_name(site, org, course_key=course_key)
         cached = cache.get(cache_key_name)
 
         if cached is not None:
@@ -145,6 +145,20 @@ class StackedConfigurationModel(ConfigurationModel):
         current = cls(**values)
         cache.set(cache_key_name, current, cls.cache_timeout)
         return current
+
+    @classmethod
+    def cache_key_name(cls, site, org, course=None, course_key=None):
+        if course is not None and course_key is not None:
+            raise ValueError("Only one of course and course_key can be specified at a time")
+        if course is not None:
+            course_key = course
+
+        if site is None:
+            site_id = None
+        else:
+            site_id = site.id
+
+        return super(StackedConfigurationModel, cls).cache_key_name(site_id, org, course_key)
 
     @classmethod
     def _org_from_course_key(cls, course_key):
